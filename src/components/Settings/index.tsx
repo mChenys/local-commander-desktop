@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
-  Card,
   Button,
-  Progress,
   Space,
   Switch,
   Select,
@@ -15,7 +13,7 @@ import {
   DeleteOutlined,
   ReloadOutlined,
 } from '@ant-design/icons'
-import { useModelStore } from '../stores'
+import { useModelStore } from '../../stores'
 
 export default function Settings() {
   const { models, setModels } = useModelStore()

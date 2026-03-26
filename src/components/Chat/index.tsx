@@ -13,8 +13,8 @@ import {
   PlusOutlined,
   CopyOutlined,
 } from '@ant-design/icons'
-import { useChatStore, useModelStore } from '../stores'
-import type { Message } from '../stores/chatStore'
+import { useChatStore, useModelStore } from '../../stores'
+import type { Message } from '../../stores/chatStore'
 
 const { TextArea } = Input
 
@@ -25,7 +25,6 @@ export default function Chat() {
     selectedModel,
     isLoading,
     createConversation,
-    selectConversation,
     setModel,
     addMessage,
     setLoading,

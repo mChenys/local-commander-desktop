@@ -15,7 +15,7 @@ import {
   PlayCircleOutlined,
   EyeOutlined,
 } from '@ant-design/icons'
-import { useAndroidStore } from '../stores'
+import { useAndroidStore } from '../../stores'
 
 export default function Android() {
   const {
@@ -27,7 +27,6 @@ export default function Android() {
     setDevices,
     selectDevice,
     setScreenshot,
-    addTestStep,
     clearTestSteps,
     setRecording,
   } = useAndroidStore()

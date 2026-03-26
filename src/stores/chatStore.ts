@@ -72,7 +72,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   addMessage: (content, role, model) => {
-    const { currentConversationId, conversations } = get()
+    const { currentConversationId } = get()
     if (!currentConversationId) return
 
     const message: Message = {
