@@ -7,14 +7,17 @@ import {
   Spin,
   Empty,
   message,
+  Alert,
 } from 'antd'
 import {
   SendOutlined,
   PlusOutlined,
   CopyOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons'
 import { useChatStore, useModelStore } from '../../stores'
 import type { Message } from '../../stores/chatStore'
+import api from '../../services/api'
 
 const { TextArea } = Input
 
@@ -30,19 +33,47 @@ export default function Chat() {
     setLoading,
   } = useChatStore()
 
-  const { models } = useModelStore()
+  const { models, setModels } = useModelStore()
 
   const [inputValue, setInputValue] = useState('')
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking')
 
   const currentConversation = conversations.find(
     (c) => c.id === currentConversationId
   )
 
+  // 检查后端状态并获取模型列表
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        await api.healthCheck()
+        setBackendStatus('online')
+
+        // 获取模型列表
+        const { models: modelList } = await api.getModels()
+        setModels(modelList.map(m => ({
+          name: m.name,
+          alias: m.alias,
+          size: m.size,
+          downloaded: m.downloaded,
+          memory: m.memory,
+        })))
+      } catch {
+        setBackendStatus('offline')
+      }
+    }
+
+    checkBackend()
+    // 每30秒检查一次后端状态
+    const interval = setInterval(checkBackend, 30000)
+    return () => clearInterval(interval)
+  }, [setModels])
+
   useEffect(() => {
     if (conversations.length === 0) {
       createConversation()
     }
-  }, [])
+  }, [conversations.length, createConversation])
 
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return
@@ -53,16 +84,31 @@ export default function Chat() {
     setLoading(true)
 
     try {
-      // TODO: Call Tauri backend
-      // Simulate response
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      addMessage(
-        `这是一个来自 ${selectedModel} 模型的模拟回复。\n\n\`\`\`typescript\nfunction example() {\n  console.log("Hello, World!");\n}\n\`\`\``,
-        'assistant',
-        selectedModel
-      )
+      if (backendStatus === 'offline') {
+        // 后端离线时使用模拟响应
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        addMessage(
+          `⚠️ 后端服务未启动，这是模拟回复。\n\n请先启动 Python 后端：\n\`\`\`bash\ncd python-backend && python main.py\n\`\`\``,
+          'assistant',
+          selectedModel
+        )
+        return
+      }
+
+      // 调用真实后端
+      const response = await api.sendMessage({
+        conversation_id: currentConversationId || '',
+        message: userMessage,
+        model: selectedModel,
+      })
+
+      if (response.success) {
+        addMessage(response.content, 'assistant', response.model)
+      } else {
+        throw new Error('请求失败')
+      }
     } catch (error) {
-      message.error('发送消息失败')
+      message.error('发送消息失败: ' + (error as Error).message)
     } finally {
       setLoading(false)
     }
@@ -146,6 +192,39 @@ export default function Chat() {
 
   return (
     <div className="chat-container">
+      {/* 后端状态提示 */}
+      {backendStatus === 'checking' && (
+        <Alert
+          message="正在检查后端服务..."
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+      )}
+      {backendStatus === 'offline' && (
+        <Alert
+          message="后端服务未启动"
+          description="请先启动 Python 后端服务: cd python-backend && python main.py"
+          type="warning"
+          showIcon
+          action={
+            <Button size="small" icon={<ReloadOutlined />} onClick={() => window.location.reload()}>
+              重试
+            </Button>
+          }
+          style={{ marginBottom: 16 }}
+        />
+      )}
+      {backendStatus === 'online' && (
+        <Alert
+          message="后端服务已连接"
+          type="success"
+          showIcon
+          closable
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
       <div className="chat-header" style={{ marginBottom: 16 }}>
         <Space>
           <Select
@@ -153,7 +232,7 @@ export default function Chat() {
             onChange={setModel}
             style={{ width: 150 }}
             options={models.map((m) => ({
-              label: `${m.alias} (${m.size})`,
+              label: `${m.alias} (${m.size})${m.downloaded ? '' : ' [未下载]'}`,
               value: m.alias,
               disabled: !m.downloaded,
             }))}

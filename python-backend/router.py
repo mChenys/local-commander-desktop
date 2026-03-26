@@ -83,14 +83,32 @@ class ModelRouter:
         """列出所有可用模型"""
         result = []
         for key, info in self.models.items():
+            # 检查模型是否已下载
+            model_id = info.get("id", "")
+            downloaded = self._check_model_downloaded(model_id)
+
             result.append({
                 "key": key,
                 "alias": info.get("alias", key),
-                "id": info.get("id"),
-                "memory_gb": info.get("memory_gb"),
+                "id": model_id,
+                "size": f"{info.get('memory_gb', 0)} GB",
+                "memory": f"{info.get('memory_gb', 0)} GB",
+                "downloaded": downloaded,
                 "use_cases": info.get("use_cases", [])
             })
         return result
+
+    def _check_model_downloaded(self, model_id: str) -> bool:
+        """检查模型是否已下载"""
+        if not model_id:
+            return False
+
+        # HuggingFace 缓存路径格式
+        cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
+        model_dir_name = f"models--{model_id.replace('/', '--')}"
+        model_path = cache_dir / model_dir_name
+
+        return model_path.exists()
 
 
 # 单例实例
