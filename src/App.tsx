@@ -13,6 +13,7 @@ import {
   SettingOutlined,
 } from '@ant-design/icons'
 import Chat from './components/Chat'
+import WebTesting from './components/Testing/Web'
 import Android from './components/Android'
 import Image from './components/Image'
 import CodeReview from './components/CodeReview'
@@ -64,13 +65,7 @@ function App() {
       case 'chat':
         return <Chat />
       case 'web':
-        return (
-          <div className="placeholder-page">
-            <h2>🌐 Web/SPA 测试</h2>
-            <p>URL 测试、页面分析、批量测试、交互验证</p>
-            <p style={{ color: '#999' }}>开发中...</p>
-          </div>
-        )
+        return <WebTesting />
       case 'android':
         return <Android />
       case 'ios':

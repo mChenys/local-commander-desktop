@@ -518,6 +518,160 @@ async def delete_knowledge(item_id: str):
     return {"success": success}
 
 
+# ============== Web Testing Endpoints ==============
+
+class WebScreenshotRequest(BaseModel):
+    url: str
+    viewport_width: int = 1400
+    viewport_height: int = 900
+    wait_time: int = 2000
+
+class WebAnalyzeRequest(BaseModel):
+    screenshot_path: str
+    prompt: str = "分析这个页面的功能、布局、UI设计，指出问题和改进建议"
+
+
+@app.post("/api/test/web/screenshot")
+async def web_screenshot(request: WebScreenshotRequest):
+    """Take screenshot of a web page using Playwright"""
+    import subprocess
+    import tempfile
+
+    try:
+        # 使用 Playwright 截图
+        output_path = f"/tmp/web-screenshot-{int(__import__('time').time())}.png"
+
+        # 创建 Playwright 脚本
+        script = f'''
+import asyncio
+from playwright.async_api import async_playwright
+
+async def main():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page(viewport={{
+            'width': {request.viewport_width},
+            'height': {request.viewport_height}
+        }})
+        await page.goto('{request.url}', wait_until='networkidle')
+        await page.wait_for_timeout({request.wait_time})
+        await page.screenshot(path='{output_path}', full_page=False)
+        await browser.close()
+        print('Screenshot saved to {output_path}')
+
+asyncio.run(main())
+'''
+
+        # 执行脚本
+        result = subprocess.run(
+            ['python3', '-c', script],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+
+        if result.returncode != 0:
+            # 如果 Playwright 不可用，尝试使用截图命令
+            return {
+                "success": False,
+                "error": f"Playwright error: {result.stderr}",
+                "screenshot_path": output_path
+            }
+
+        return {
+            "success": True,
+            "screenshot_path": output_path
+        }
+
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="Screenshot timeout")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/test/web/analyze")
+async def web_analyze(request: WebAnalyzeRequest):
+    """Analyze a web page screenshot using VL model"""
+    from pathlib import Path
+
+    # 检查截图是否存在
+    if not Path(request.screenshot_path).exists():
+        raise HTTPException(status_code=404, detail="Screenshot not found")
+
+    router = get_router()
+    model = router._get_model_by_alias("vl")
+
+    if not model:
+        raise HTTPException(status_code=500, detail="VL model not configured")
+
+    try:
+        executor = get_executor()
+        success, output, _ = executor.execute(
+            model["id"],
+            request.prompt,
+            image_path=request.screenshot_path,
+            max_tokens=4096
+        )
+
+        return {
+            "success": success,
+            "analysis": output
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/test/web/batch")
+async def web_batch_test(urls: list[str]):
+    """Batch test multiple URLs"""
+    import asyncio
+    import subprocess
+
+    results = []
+
+    for url in urls:
+        try:
+            output_path = f"/tmp/web-screenshot-{hash(url)}.png"
+
+            script = f'''
+import asyncio
+from playwright.async_api import async_playwright
+
+async def main():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+        await page.goto('{url}', wait_until='networkidle', timeout=30000)
+        await page.screenshot(path='{output_path}')
+        await browser.close()
+
+asyncio.run(main())
+'''
+
+            result = subprocess.run(
+                ['python3', '-c', script],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+
+            results.append({
+                "url": url,
+                "success": result.returncode == 0,
+                "screenshot_path": output_path if result.returncode == 0 else None,
+                "error": result.stderr if result.returncode != 0 else None
+            })
+
+        except Exception as e:
+            results.append({
+                "url": url,
+                "success": False,
+                "error": str(e)
+            })
+
+    return {"results": results}
+
+
 # ============== Android Endpoints ==============
 
 @app.get("/api/android/devices")
