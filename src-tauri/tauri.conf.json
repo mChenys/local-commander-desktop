@@ -42,19 +42,7 @@
   },
   "plugins": {
     "shell": {
-      "open": true,
-      "scope": [
-        {
-          "name": "python",
-          "cmd": "python3",
-          "args": true
-        },
-        {
-          "name": "adb",
-          "cmd": "adb",
-          "args": true
-        }
-      ]
+      "open": true
     }
   }
 }
