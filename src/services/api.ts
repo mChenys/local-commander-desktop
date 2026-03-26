@@ -118,6 +118,82 @@ class ApiClient {
     })
   }
 
+  /**
+   * 流式发送消息，返回 EventSource
+   */
+  streamMessage(
+    request: ChatRequest,
+    onChunk: (content: string) => void,
+    onDone: () => void,
+    onError: (error: string) => void
+  ): () => void {
+    const url = `${this.baseUrl}/api/chat/stream`
+
+    // 使用 fetch + ReadableStream 实现流式读取
+    const controller = new AbortController()
+
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP error: ${response.status}`)
+        }
+
+        const reader = response.body?.getReader()
+        if (!reader) {
+          throw new Error('No response body')
+        }
+
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+
+          // 解析 SSE 数据
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6))
+                if (data.error) {
+                  onError(data.error)
+                } else if (data.content) {
+                  onChunk(data.content)
+                  if (data.done) {
+                    onDone()
+                  }
+                }
+              } catch {
+                // 忽略解析错误
+              }
+            }
+          }
+        }
+
+        onDone()
+      })
+      .catch((error) => {
+        if (error.name !== 'AbortError') {
+          onError(error.message)
+        }
+      })
+
+    // 返回取消函数
+    return () => controller.abort()
+  }
+
   // ============ Image Analysis ============
 
   async analyzeImage(

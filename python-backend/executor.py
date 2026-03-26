@@ -339,7 +339,8 @@ Analyze the code and provide modifications in JSON format.
         model_id: str,
         prompt: str,
         max_tokens: int,
-        temperature: float
+        temperature: float,
+        stream: bool = False
     ) -> Tuple[bool, str, Dict[str, Any]]:
         """执行文本模型"""
         cmd = [
@@ -356,6 +357,10 @@ Analyze the code and provide modifications in JSON format.
         }
 
         try:
+            if stream:
+                # 流式输出 - 返回生成器
+                return self._execute_lm_stream(cmd, metadata)
+
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -373,6 +378,44 @@ Analyze the code and provide modifications in JSON format.
             return False, "执行超时", metadata
         except Exception as e:
             return False, str(e), metadata
+
+    def _execute_lm_stream(self, cmd: list, metadata: dict):
+        """流式执行文本模型"""
+        import sys
+
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1  # 行缓冲
+        )
+
+        full_output = []
+
+        try:
+            for line in iter(process.stdout.readline, ''):
+                if line:
+                    # 清理输出
+                    cleaned = line.strip()
+                    if cleaned and not cleaned.startswith('==='):
+                        full_output.append(cleaned)
+                        yield True, cleaned + '\n', metadata
+
+            process.wait()
+
+            if process.returncode != 0:
+                stderr = process.stderr.read()
+                yield False, stderr, metadata
+            else:
+                # 返回完整输出
+                final_output = self._parse_output('\n'.join(full_output))
+                metadata['done'] = True
+                yield True, final_output, metadata
+
+        except Exception as e:
+            process.kill()
+            yield False, str(e), metadata
 
     def _execute_vl(
         self,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import {
   Input,
   Button,
@@ -14,12 +14,39 @@ import {
   PlusOutlined,
   CopyOutlined,
   ReloadOutlined,
+  StopOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons'
 import { useChatStore, useModelStore } from '../../stores'
 import type { Message } from '../../stores/chatStore'
 import api from '../../services/api'
 
 const { TextArea } = Input
+
+// 本地存储键
+const STORAGE_KEY = 'local-commander-conversations'
+
+// 从 localStorage 加载对话
+const loadConversations = () => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      return JSON.parse(saved)
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
+// 保存对话到 localStorage
+const saveConversations = (conversations: any[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations))
+  } catch {
+    // ignore
+  }
+}
 
 export default function Chat() {
   const {
@@ -31,16 +58,34 @@ export default function Chat() {
     setModel,
     addMessage,
     setLoading,
+    setConversations,
   } = useChatStore()
 
   const { models, setModels } = useModelStore()
 
   const [inputValue, setInputValue] = useState('')
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking')
+  const [streamingContent, setStreamingContent] = useState('')
+  const abortRef = useRef<(() => void) | null>(null)
 
   const currentConversation = conversations.find(
     (c) => c.id === currentConversationId
   )
+
+  // 从 localStorage 加载对话历史
+  useEffect(() => {
+    const saved = loadConversations()
+    if (saved && saved.length > 0) {
+      setConversations(saved)
+    }
+  }, [setConversations])
+
+  // 保存对话历史到 localStorage
+  useEffect(() => {
+    if (conversations.length > 0) {
+      saveConversations(conversations)
+    }
+  }, [conversations])
 
   // 检查后端状态并获取模型列表
   useEffect(() => {
@@ -75,6 +120,17 @@ export default function Chat() {
     }
   }, [conversations.length, createConversation])
 
+  // 更新最后一条消息的内容（用于流式输出）
+  const updateLastMessage = useCallback((content: string) => {
+    setStreamingContent(content)
+  }, [])
+
+  // 完成流式输出，添加完整消息
+  const finalizeMessage = useCallback((content: string, model: string) => {
+    setStreamingContent('')
+    addMessage(content, 'assistant', model)
+  }, [addMessage])
+
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return
 
@@ -82,6 +138,7 @@ export default function Chat() {
     setInputValue('')
     addMessage(userMessage, 'user')
     setLoading(true)
+    setStreamingContent('')
 
     try {
       if (backendStatus === 'offline') {
@@ -95,23 +152,55 @@ export default function Chat() {
         return
       }
 
-      // 调用真实后端
-      const response = await api.sendMessage({
-        conversation_id: currentConversationId || '',
-        message: userMessage,
-        model: selectedModel,
-      })
+      // 使用流式输出
+      let fullContent = ''
 
-      if (response.success) {
-        addMessage(response.content, 'assistant', response.model)
-      } else {
-        throw new Error('请求失败')
-      }
+      const abort = api.streamMessage(
+        {
+          conversation_id: currentConversationId || '',
+          message: userMessage,
+          model: selectedModel,
+        },
+        (chunk) => {
+          fullContent += chunk
+          updateLastMessage(fullContent)
+        },
+        () => {
+          finalizeMessage(fullContent, selectedModel)
+          setLoading(false)
+        },
+        (error) => {
+          message.error('发送消息失败: ' + error)
+          setLoading(false)
+          setStreamingContent('')
+        }
+      )
+
+      abortRef.current = abort
+
     } catch (error) {
       message.error('发送消息失败: ' + (error as Error).message)
-    } finally {
       setLoading(false)
     }
+  }
+
+  // 停止流式输出
+  const handleStop = () => {
+    if (abortRef.current) {
+      abortRef.current()
+      abortRef.current = null
+    }
+    if (streamingContent) {
+      // 保存已生成的内容
+      finalizeMessage(streamingContent, selectedModel)
+    }
+    setLoading(false)
+  }
+
+  // 清空对话历史
+  const handleClearHistory = () => {
+    localStorage.removeItem(STORAGE_KEY)
+    message.success('对话历史已清空')
   }
 
   const copyCode = (code: string) => {
@@ -243,6 +332,13 @@ export default function Chat() {
           >
             新对话
           </Button>
+          <Button
+            icon={<DeleteOutlined />}
+            onClick={handleClearHistory}
+            danger
+          >
+            清空历史
+          </Button>
         </Space>
       </div>
 
@@ -252,9 +348,16 @@ export default function Chat() {
         ) : (
           <Empty description="开始新对话" style={{ marginTop: 100 }} />
         )}
-        {isLoading && (
-          <div style={{ textAlign: 'center', padding: 20 }}>
-            <Spin tip="正在生成..." />
+        {/* 流式输出内容 */}
+        {streamingContent && (
+          <div className="message assistant" style={{ marginLeft: 0 }}>
+            <div className="message-header">
+              🤖 {selectedModel}
+              <Spin size="small" style={{ marginLeft: 8 }} />
+            </div>
+            <div className="message-content" style={{ whiteSpace: 'pre-wrap' }}>
+              {streamingContent}
+            </div>
           </div>
         )}
       </div>
@@ -272,14 +375,24 @@ export default function Chat() {
             }
           }}
         />
-        <Button
-          type="primary"
-          icon={<SendOutlined />}
-          onClick={handleSend}
-          loading={isLoading}
-        >
-          发送
-        </Button>
+        {isLoading ? (
+          <Button
+            danger
+            icon={<StopOutlined />}
+            onClick={handleStop}
+          >
+            停止
+          </Button>
+        ) : (
+          <Button
+            type="primary"
+            icon={<SendOutlined />}
+            onClick={handleSend}
+            disabled={!inputValue.trim()}
+          >
+            发送
+          </Button>
+        )}
       </div>
     </div>
   )

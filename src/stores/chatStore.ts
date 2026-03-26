@@ -30,6 +30,7 @@ interface ChatState {
   setModel: (model: string) => void
   addMessage: (content: string, role: 'user' | 'assistant', model?: string) => void
   setLoading: (loading: boolean) => void
+  setConversations: (conversations: Conversation[]) => void
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -102,5 +103,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setLoading: (loading) => {
     set({ isLoading: loading })
+  },
+
+  setConversations: (conversations) => {
+    set({ conversations, currentConversationId: conversations[0]?.id || null })
   },
 }))

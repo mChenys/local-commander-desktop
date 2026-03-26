@@ -6,13 +6,16 @@ FastAPI server for Tauri desktop application
 
 import os
 import sys
+import json
 from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import uvicorn
+import asyncio
 
 # Add lib to path
 BACKEND_DIR = Path(__file__).parent
@@ -130,6 +133,61 @@ async def send_message(request: MessageRequest):
         "model": request.model,
         "meta": meta
     }
+
+
+@app.post("/api/chat/stream")
+async def stream_message(request: MessageRequest):
+    """Stream message response using SSE"""
+
+    async def generate():
+        router = get_router()
+        executor = get_executor()
+
+        model = router._get_model_by_alias(request.model)
+        if not model:
+            yield f"data: {json.dumps({'error': f'Unknown model: {request.model}'})}\n\n"
+            return
+
+        try:
+            # 使用简单执行（不带上下文）
+            result = executor.execute(
+                model["id"],
+                request.message,
+                max_tokens=request.max_tokens,
+                stream=True
+            )
+
+            # 处理流式输出
+            if hasattr(result, '__iter__'):
+                for success, chunk, meta in result:
+                    if success:
+                        data = {
+                            "content": chunk,
+                            "done": meta.get("done", False)
+                        }
+                        yield f"data: {json.dumps(data)}\n\n"
+
+                        if meta.get("done"):
+                            break
+                    else:
+                        yield f"data: {json.dumps({'error': chunk})}\n\n"
+                        break
+            else:
+                # 非流式结果
+                success, output, meta = result
+                yield f"data: {json.dumps({'content': output, 'done': True})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
 
 
 # ============== Model Endpoints ==============
