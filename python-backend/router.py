@@ -110,6 +110,29 @@ class ModelRouter:
 
         return model_path.exists()
 
+    def get_model_size(self, model_id: str) -> dict:
+        """获取模型大小信息"""
+        cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
+        model_dir_name = f"models--{model_id.replace('/', '--')}"
+        model_path = cache_dir / model_dir_name
+
+        if model_path.exists():
+            # 计算已下载大小
+            total_size = 0
+            for f in model_path.rglob("*"):
+                if f.is_file():
+                    total_size += f.stat().st_size
+            return {
+                "downloaded": True,
+                "size_bytes": total_size,
+                "size_gb": round(total_size / (1024**3), 2)
+            }
+        return {
+            "downloaded": False,
+            "size_bytes": 0,
+            "size_gb": 0
+        }
+
 
 # 单例实例
 _router_instance = None

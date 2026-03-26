@@ -212,6 +212,166 @@ async def get_models():
     }
 
 
+@app.get("/api/models/{alias}/status")
+async def get_model_status(alias: str):
+    """Get detailed status of a specific model"""
+    router = get_router()
+    model = router._get_model_by_alias(alias)
+
+    if not model:
+        raise HTTPException(status_code=404, detail=f"Model not found: {alias}")
+
+    size_info = router.get_model_size(model["id"])
+
+    return {
+        "alias": alias,
+        "model_id": model["id"],
+        "downloaded": size_info["downloaded"],
+        "size_bytes": size_info["size_bytes"],
+        "size_gb": size_info["size_gb"]
+    }
+
+
+# 下载状态存储
+_download_status = {}
+
+@app.post("/api/models/{alias}/download")
+async def download_model(alias: str):
+    """Start downloading a model"""
+    import subprocess
+    import threading
+
+    router = get_router()
+    model = router._get_model_by_alias(alias)
+
+    if not model:
+        raise HTTPException(status_code=404, detail=f"Model not found: {alias}")
+
+    model_id = model["id"]
+
+    # 检查是否已下载
+    if router._check_model_downloaded(model_id):
+        return {
+            "success": True,
+            "message": "Model already downloaded",
+            "alias": alias,
+            "model_id": model_id
+        }
+
+    # 检查是否正在下载
+    if _download_status.get(alias, {}).get("status") == "downloading":
+        return {
+            "success": False,
+            "message": "Model is already downloading",
+            "alias": alias
+        }
+
+    # 启动后台下载
+    _download_status[alias] = {
+        "status": "downloading",
+        "progress": 0,
+        "error": None
+    }
+
+    def download_task():
+        try:
+            # 使用 huggingface-cli 下载
+            cmd = [
+                "huggingface-cli", "download",
+                model_id,
+                "--local-dir-use-symlinks", "True"
+            ]
+
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True
+            )
+
+            for line in iter(process.stdout.readline, ''):
+                # 解析下载进度
+                if 'Downloading' in line or '%' in line:
+                    _download_status[alias]["last_line"] = line.strip()
+
+            process.wait()
+
+            if process.returncode == 0:
+                _download_status[alias] = {
+                    "status": "completed",
+                    "progress": 100,
+                    "error": None
+                }
+            else:
+                _download_status[alias] = {
+                    "status": "failed",
+                    "progress": 0,
+                    "error": "Download failed"
+                }
+        except Exception as e:
+            _download_status[alias] = {
+                "status": "failed",
+                "progress": 0,
+                "error": str(e)
+            }
+
+    thread = threading.Thread(target=download_task)
+    thread.daemon = True
+    thread.start()
+
+    return {
+        "success": True,
+        "message": "Download started",
+        "alias": alias,
+        "model_id": model_id
+    }
+
+
+@app.get("/api/models/{alias}/download/status")
+async def get_download_status(alias: str):
+    """Get download status of a model"""
+    status = _download_status.get(alias, {
+        "status": "not_started",
+        "progress": 0,
+        "error": None
+    })
+
+    # 如果已完成，验证模型是否存在
+    if status["status"] == "completed":
+        router = get_router()
+        model = router._get_model_by_alias(alias)
+        if model and router._check_model_downloaded(model["id"]):
+            status["verified"] = True
+
+    return status
+
+
+@app.delete("/api/models/{alias}")
+async def delete_model(alias: str):
+    """Delete a downloaded model"""
+    import shutil
+
+    router = get_router()
+    model = router._get_model_by_alias(alias)
+
+    if not model:
+        raise HTTPException(status_code=404, detail=f"Model not found: {alias}")
+
+    model_id = model["id"]
+    cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
+    model_dir_name = f"models--{model_id.replace('/', '--')}"
+    model_path = cache_dir / model_dir_name
+
+    if not model_path.exists():
+        raise HTTPException(status_code=404, detail="Model not downloaded")
+
+    try:
+        shutil.rmtree(model_path)
+        return {"success": True, "message": f"Model {alias} deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============== Image Analysis Endpoints ==============
 
 @app.post("/api/image/analyze")

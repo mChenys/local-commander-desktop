@@ -109,6 +109,46 @@ class ApiClient {
     return this.request('/api/models')
   }
 
+  async getModelStatus(alias: string): Promise<{
+    alias: string
+    model_id: string
+    downloaded: boolean
+    size_bytes: number
+    size_gb: number
+  }> {
+    return this.request(`/api/models/${alias}/status`)
+  }
+
+  async downloadModel(alias: string): Promise<{
+    success: boolean
+    message: string
+    alias: string
+    model_id?: string
+  }> {
+    return this.request(`/api/models/${alias}/download`, {
+      method: 'POST',
+    })
+  }
+
+  async getDownloadStatus(alias: string): Promise<{
+    status: 'not_started' | 'downloading' | 'completed' | 'failed'
+    progress: number
+    error: string | null
+    last_line?: string
+    verified?: boolean
+  }> {
+    return this.request(`/api/models/${alias}/download/status`)
+  }
+
+  async deleteModel(alias: string): Promise<{
+    success: boolean
+    message: string
+  }> {
+    return this.request(`/api/models/${alias}`, {
+      method: 'DELETE',
+    })
+  }
+
   // ============ Chat ============
 
   async sendMessage(request: ChatRequest): Promise<ChatResponse> {
