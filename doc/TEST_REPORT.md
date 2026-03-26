@@ -148,8 +148,8 @@
 1. **对话模块**
    - [x] 连接 Python 后端 API
    - [x] 后端状态显示
-   - [ ] 实现流式输出
-   - [ ] 实现对话历史持久化
+   - [x] 实现流式输出
+   - [x] 实现对话历史持久化
 
 2. **模型管理**
    - [x] 显示模型列表
@@ -159,7 +159,8 @@
 
 3. **Python 后端集成**
    - [x] 启动 FastAPI 服务
-   - [x] 实现 /api/chat 接口
+   - [x] 实现 /api/chat/send 接口
+   - [x] 实现 /api/chat/stream 流式接口
    - [x] 实现 /api/models 接口
    - [ ] 实现 /api/analyze-image 接口
 
