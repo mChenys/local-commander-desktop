@@ -2,7 +2,11 @@ import { useState } from 'react'
 import { Layout, Menu, theme } from 'antd'
 import {
   MessageOutlined,
+  GlobalOutlined,
   AndroidOutlined,
+  AppleOutlined,
+  DesktopOutlined,
+  ApiOutlined,
   PictureOutlined,
   CodeOutlined,
   BookOutlined,
@@ -18,14 +22,33 @@ import './App.css'
 
 const { Header, Sider, Content } = Layout
 
-type PageKey = 'chat' | 'android' | 'image' | 'code' | 'knowledge' | 'settings'
+type PageKey =
+  | 'chat'
+  | 'web'
+  | 'android'
+  | 'ios'
+  | 'desktop'
+  | 'api'
+  | 'image'
+  | 'code'
+  | 'knowledge'
+  | 'settings'
 
 const menuItems = [
   { key: 'chat', icon: <MessageOutlined />, label: '对话' },
-  { key: 'android', icon: <AndroidOutlined />, label: 'Android 自动化' },
+  { type: 'divider' as const },
+  { key: 'testing-group', type: 'group' as const, label: 'UI 自动化测试' },
+  { key: 'web', icon: <GlobalOutlined />, label: 'Web 测试' },
+  { key: 'android', icon: <AndroidOutlined />, label: 'Android' },
+  { key: 'ios', icon: <AppleOutlined />, label: 'iOS' },
+  { key: 'desktop', icon: <DesktopOutlined />, label: '桌面应用' },
+  { key: 'api', icon: <ApiOutlined />, label: 'API 测试' },
+  { type: 'divider' as const },
+  { key: 'tools-group', type: 'group' as const, label: '工具' },
   { key: 'image', icon: <PictureOutlined />, label: '图像分析' },
   { key: 'code', icon: <CodeOutlined />, label: '代码审查' },
   { key: 'knowledge', icon: <BookOutlined />, label: '知识库' },
+  { type: 'divider' as const },
   { key: 'settings', icon: <SettingOutlined />, label: '设置' },
 ]
 
@@ -40,8 +63,40 @@ function App() {
     switch (currentPage) {
       case 'chat':
         return <Chat />
+      case 'web':
+        return (
+          <div className="placeholder-page">
+            <h2>🌐 Web/SPA 测试</h2>
+            <p>URL 测试、页面分析、批量测试、交互验证</p>
+            <p style={{ color: '#999' }}>开发中...</p>
+          </div>
+        )
       case 'android':
         return <Android />
+      case 'ios':
+        return (
+          <div className="placeholder-page">
+            <h2>🍎 iOS 测试</h2>
+            <p>iOS 模拟器管理、真机连接、截图分析、操作录制</p>
+            <p style={{ color: '#999' }}>开发中...</p>
+          </div>
+        )
+      case 'desktop':
+        return (
+          <div className="placeholder-page">
+            <h2>🖥️ 桌面应用测试</h2>
+            <p>macOS 原生窗口、元素查询、UI 分析</p>
+            <p style={{ color: '#999' }}>开发中...</p>
+          </div>
+        )
+      case 'api':
+        return (
+          <div className="placeholder-page">
+            <h2>🔗 API 测试</h2>
+            <p>HTTP 请求、测试序列、断言验证</p>
+            <p style={{ color: '#999' }}>开发中...</p>
+          </div>
+        )
       case 'image':
         return <Image />
       case 'code':
@@ -53,6 +108,11 @@ function App() {
       default:
         return <Chat />
     }
+  }
+
+  const getCurrentLabel = () => {
+    const item = menuItems.find((item) => 'key' in item && item.key === currentPage)
+    return item && 'label' in item ? item.label : ''
   }
 
   return (
@@ -79,9 +139,7 @@ function App() {
       <Layout>
         <Header style={{ padding: 0, background: colorBgContainer }}>
           <div className="header-content">
-            <span className="page-title">
-              {menuItems.find((item) => item.key === currentPage)?.label}
-            </span>
+            <span className="page-title">{getCurrentLabel()}</span>
           </div>
         </Header>
         <Content
