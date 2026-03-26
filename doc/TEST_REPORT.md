@@ -154,14 +154,16 @@
 2. **模型管理**
    - [x] 显示模型列表
    - [x] 显示模型下载状态
-   - [ ] 实现模型下载功能
-   - [ ] 显示模型下载进度
+   - [x] 实现模型下载功能
+   - [x] 显示模型下载进度
+   - [x] 删除已下载模型
 
 3. **Python 后端集成**
    - [x] 启动 FastAPI 服务
    - [x] 实现 /api/chat/send 接口
    - [x] 实现 /api/chat/stream 流式接口
    - [x] 实现 /api/models 接口
+   - [x] 实现 /api/models/{alias}/download 接口
    - [ ] 实现 /api/analyze-image 接口
 
 ### M3: 测试模块开发 (下一阶段)
